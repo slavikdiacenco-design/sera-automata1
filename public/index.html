@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seră Automatizată</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; padding: 16px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 20px; color: #333; }
+    .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 16px; }
+    .grid2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-bottom: 16px; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .metric-label { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 6px; }
+    .metric-value { font-size: 28px; font-weight: bold; color: #333; }
+    .metric-unit { font-size: 14px; color: #888; }
+    .section-title { font-size: 13px; font-weight: bold; color: #888; text-transform: uppercase; margin-bottom: 12px; }
+    .actuator-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+    .actuator-row:last-child { border-bottom: none; }
+    .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; transition: .2s; }
+    .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+    input:checked + .slider { background: #2ecc71; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
+    .alert-ok   { background: #e8f5e9; color: #2e7d32; }
+    .alert-warn { background: #fff8e1; color: #f57f17; }
+    .alert-err  { background: #ffebee; color: #c62828; }
+    .chart-wrap { height: 200px; }
+    .tab-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #ddd; background: #f5f5f5; }
+    .tab.active { background: #333; color: #fff; border-color: #333; }
+    .last-update { font-size: 11px; color: #aaa; text-align: right; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🌱 Seră Automatizată</h1>
+  <div id="last-update" class="last-update">Se încarcă...</div>
+
+  <div class="grid3">
+    <div class="card">
+      <div class="metric-label">Temperatură</div>
+      <div><span class="metric-value" id="val-temp">--</span><span class="metric-unit"> °C</span></div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Umiditate aer</div>
+      <div><span class="metric-value" id="val-umid">--</span><span class="metric-unit"> %</span></div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Umiditate sol</div>
+      <div><span class="metric-value" id="val-sol">--</span><span class="metric-unit"> %</span></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="section-title">Actuatori</div>
+      <div class="actuator-row">
+        <span>Încălzitor PTC</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-ptc" onchange="sendCmd('ptc',this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="actuator-row">
+        <span>Ventilator</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-fan" onchange="sendCmd('fan',this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="actuator-row">
+        <span>Pompă irigare</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-pompa" onchange="sendCmd('pompa',this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title">Alerte</div>
+      <div id="alerts">
+        <div class="alert alert-ok">Așteptare date...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Istoric 24 ore</div>
+    <div class="tab-row">
+      <div class="tab active" onclick="switchTab('temp',this)">Temperatură</div>
+      <div class="tab" onclick="switchTab('umid',this)">Umiditate aer</div>
+      <div class="tab" onclick="switchTab('sol',this)">Umiditate sol</div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+const SERVER = '';
+let chart = null;
+let activeTab = 'temp';
+let istoric = { temp:[], umid:[], sol:[], labels:[] };
+
+function switchTab(tab, el) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  updateChart();
+}
+
+function updateChart() {
+  const sets = {
+    temp: { label:'Temperatură (°C)', color:'#e74c3c', data: istoric.temp },
+    umid: { label:'Umiditate aer (%)', color:'#3498db', data: istoric.umid },
+    sol:  { label:'Umiditate sol (%)', color:'#2ecc71', data: istoric.sol }
+  };
+  const s = sets[activeTab];
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: istoric.labels,
+      datasets: [{
+        label: s.label,
+        data: s.data,
+        borderColor: s.color,
+        backgroundColor: s.color + '22',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, font: { size: 11 } } },
+        y: { ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function updateAlerts(d) {
+  const box = document.getElementById('alerts');
+  const alerts = [];
+  if (d.temperatura < 18)
+    alerts.push({ t:'err',  m:'Temperatura sub minim (18°C)!' });
+  else if (d.temperatura > 30)
+    alerts.push({ t:'warn', m:'Temperatura peste maxim (30°C)!' });
+  if ((d.sol1 + d.sol2) / 2 < 30)
+    alerts.push({ t:'warn', m:'Sol uscat — pompa activa!' });
+  box.innerHTML = alerts.length === 0
+    ? '<div class="alert alert-ok">Toti parametrii normali ✓</div>'
+    : alerts.map(a =>
+        `<div class="alert alert-${a.t === 'err' ? 'err' : 'warn'}">${a.m}</div>`
+      ).join('');
+}
+
+async function fetchDate() {
+  try {
+    const [cur, ist] = await Promise.all([
+      fetch(SERVER + '/api/curent').then(r => r.json()),
+      fetch(SERVER + '/api/istoric').then(r => r.json())
+    ]);
+
+    document.getElementById('val-temp').textContent =
+      cur.temperatura != null ? Number(cur.temperatura).toFixed(1) : '--';
+    document.getElementById('val-umid').textContent =
+      cur.umiditate != null ? Number(cur.umiditate).toFixed(0) : '--';
+    const sol = (cur.sol1 != null && cur.sol2 != null)
+      ? Math.round((cur.sol1 + cur.sol2) / 2) : '--';
+    document.getElementById('val-sol').textContent = sol;
+
+    document.getElementById('tog-ptc').checked   = !!cur.ptc;
+    document.getElementById('tog-fan').checked   = !!cur.fan;
+    document.getElementById('tog-pompa').checked = !!cur.pompa;
+
+    if (cur.temperatura != null) updateAlerts(cur);
+
+    istoric.labels = ist.map(r =>
+      new Date(r.creat_la).toLocaleTimeString('ro-RO',
+        { hour:'2-digit', minute:'2-digit' })
+    );
+    istoric.temp = ist.map(r => r.temperatura);
+    istoric.umid = ist.map(r => r.umiditate);
+    istoric.sol  = ist.map(r =>
+      r.sol1 != null && r.sol2 != null
+        ? Math.round((r.sol1 + r.sol2) / 2) : null
+    );
+    updateChart();
+
+    document.getElementById('last-update').textContent =
+      'Actualizat: ' + new Date().toLocaleTimeString('ro-RO');
+  } catch(e) {
+    document.getElementById('last-update').textContent =
+      'Eroare conexiune server';
+  }
+}
+
+async function sendCmd(actuator, stare) {
+  try {
+    await fetch(SERVER + '/api/comanda', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actuator, stare })
+    });
+  } catch(e) {}
+}
+
+fetchDate();
+setInterval(fetchDate, 10000);
+</script>
+</body>
+</html>
