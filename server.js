@@ -1,7 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
-const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -28,23 +27,30 @@ async function initDB() {
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS comenzi (
-      id SERIAL PRIMARY KEY,
-      actuator VARCHAR(20),
-      stare BOOLEAN,
-      executat BOOLEAN DEFAULT FALSE,
-      creat_la TIMESTAMP DEFAULT NOW()
+    CREATE TABLE IF NOT EXISTS control (
+      id INT PRIMARY KEY DEFAULT 1,
+      mod_manual BOOLEAN DEFAULT FALSE,
+      ptc BOOLEAN DEFAULT FALSE,
+      fan BOOLEAN DEFAULT FALSE,
+      pompa BOOLEAN DEFAULT FALSE,
+      actualizat_la TIMESTAMP DEFAULT NOW()
     )
+  `);
+  // Inserezi un singur rand de control daca nu exista
+  await pool.query(`
+    INSERT INTO control (id, mod_manual, ptc, fan, pompa)
+    VALUES (1, FALSE, FALSE, FALSE, FALSE)
+    ON CONFLICT (id) DO NOTHING
   `);
   console.log('Baza de date initializata!');
 }
 
+// ESP32 trimite date senzori
 app.post('/api/date', async (req, res) => {
   const { temperatura, umiditate, sol1, sol2, ptc, fan, pompa } = req.body;
   try {
     await pool.query(
-      `INSERT INTO senzori
-       (temperatura, umiditate, sol1, sol2, ptc, fan, pompa)
+      `INSERT INTO senzori (temperatura, umiditate, sol1, sol2, ptc, fan, pompa)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [temperatura, umiditate, sol1, sol2, ptc, fan, pompa]
     );
@@ -54,6 +60,7 @@ app.post('/api/date', async (req, res) => {
   }
 });
 
+// Browser citeste ultima valoare
 app.get('/api/curent', async (req, res) => {
   try {
     const result = await pool.query(
@@ -65,6 +72,7 @@ app.get('/api/curent', async (req, res) => {
   }
 });
 
+// Browser citeste istoricul 24h
 app.get('/api/istoric', async (req, res) => {
   try {
     const result = await pool.query(
@@ -78,12 +86,16 @@ app.get('/api/istoric', async (req, res) => {
   }
 });
 
-app.post('/api/comanda', async (req, res) => {
-  const { actuator, stare } = req.body;
+// Browser trimite starea completa a controlului
+app.post('/api/control', async (req, res) => {
+  const { mod_manual, ptc, fan, pompa } = req.body;
   try {
     await pool.query(
-      `INSERT INTO comenzi (actuator, stare) VALUES ($1, $2)`,
-      [actuator, stare]
+      `UPDATE control SET
+       mod_manual = $1, ptc = $2, fan = $3, pompa = $4,
+       actualizat_la = NOW()
+       WHERE id = 1`,
+      [mod_manual, ptc, fan, pompa]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -91,15 +103,13 @@ app.post('/api/comanda', async (req, res) => {
   }
 });
 
-app.get('/api/comenzi', async (req, res) => {
+// ESP32 citeste starea controlului
+app.get('/api/control', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM comenzi WHERE executat = FALSE ORDER BY creat_la ASC`
+      `SELECT * FROM control WHERE id = 1`
     );
-    await pool.query(
-      `UPDATE comenzi SET executat = TRUE WHERE executat = FALSE`
-    );
-    res.json(result.rows);
+    res.json(result.rows[0] || {});
   } catch (err) {
     res.status(500).json({ eroare: err.message });
   }

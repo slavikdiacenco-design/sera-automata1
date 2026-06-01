@@ -21,8 +21,6 @@
     .actuator-row:last-child { border-bottom: none; }
     .act-name { font-size: 14px; color: #333; }
     .act-state { font-size: 11px; color: #aaa; margin-top: 2px; }
-
-    /* Toggle switch */
     .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
     .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
     .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; transition: .2s; }
@@ -30,14 +28,11 @@
     input:checked + .slider { background: #2ecc71; }
     input:checked + .slider:before { transform: translateX(20px); }
     .toggle.disabled { opacity: 0.4; pointer-events: none; }
-
-    /* Buton Auto/Manual */
     .mode-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; }
     .mode-btn { padding: 8px 28px; border-radius: 20px; border: none; font-size: 14px; font-weight: bold; cursor: pointer; transition: all .2s; }
     .mode-btn.auto   { background: #2ecc71; color: #fff; }
     .mode-btn.manual { background: #e74c3c; color: #fff; }
     .mode-label { font-size: 13px; color: #888; }
-
     .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
     .alert-ok   { background: #e8f5e9; color: #2e7d32; }
     .alert-warn { background: #fff8e1; color: #f57f17; }
@@ -48,7 +43,6 @@
     .tab { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #ddd; background: #f5f5f5; }
     .tab.active { background: #333; color: #fff; border-color: #333; }
     .last-update { font-size: 11px; color: #aaa; text-align: right; margin-bottom: 12px; }
-
     @media(max-width:600px) {
       .grid3 { grid-template-columns: 1fr; }
       .grid2 { grid-template-columns: 1fr; }
@@ -60,16 +54,12 @@
   <h1>🌱 Seră Automatizată</h1>
   <div id="last-update" class="last-update">Se încarcă...</div>
 
-  <!-- Buton Auto / Manual -->
   <div class="mode-bar">
     <span class="mode-label">Mod curent:</span>
-    <button id="mode-btn" class="mode-btn auto" onclick="toggleMode()">
-      AUTO
-    </button>
+    <button id="mode-btn" class="mode-btn auto" onclick="toggleMode()">AUTO</button>
     <span id="mode-desc" class="mode-label">Sistemul controlează automat</span>
   </div>
 
-  <!-- Carduri valori -->
   <div class="grid3">
     <div class="card">
       <div class="metric-label">Temperatură</div>
@@ -86,45 +76,39 @@
   </div>
 
   <div class="grid2">
-    <!-- Actuatori -->
     <div class="card">
       <div class="section-title">Actuatori</div>
-
       <div class="actuator-row">
         <div>
           <div class="act-name">Încălzitor PTC</div>
           <div class="act-state" id="state-ptc">controlat automat</div>
         </div>
         <label class="toggle disabled" id="lbl-ptc">
-          <input type="checkbox" id="tog-ptc" onchange="sendCmd('ptc',this.checked)">
+          <input type="checkbox" id="tog-ptc" onchange="actuatorChanged()">
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="actuator-row">
         <div>
           <div class="act-name">Ventilator</div>
           <div class="act-state" id="state-fan">controlat automat</div>
         </div>
         <label class="toggle disabled" id="lbl-fan">
-          <input type="checkbox" id="tog-fan" onchange="sendCmd('fan',this.checked)">
+          <input type="checkbox" id="tog-fan" onchange="actuatorChanged()">
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="actuator-row">
         <div>
           <div class="act-name">Pompă irigare</div>
           <div class="act-state" id="state-pompa">controlată automat</div>
         </div>
         <label class="toggle disabled" id="lbl-pompa">
-          <input type="checkbox" id="tog-pompa" onchange="sendCmd('pompa',this.checked)">
+          <input type="checkbox" id="tog-pompa" onchange="actuatorChanged()">
           <span class="slider"></span>
         </label>
       </div>
     </div>
-
-    <!-- Alerte -->
     <div class="card">
       <div class="section-title">Alerte</div>
       <div id="alerts">
@@ -133,7 +117,6 @@
     </div>
   </div>
 
-  <!-- Grafic -->
   <div class="card">
     <div class="section-title">Istoric 24 ore</div>
     <div class="tab-row">
@@ -141,68 +124,70 @@
       <div class="tab" onclick="switchTab('umid',this)">Umiditate aer</div>
       <div class="tab" onclick="switchTab('sol',this)">Umiditate sol</div>
     </div>
-    <div class="chart-wrap">
-      <canvas id="chart"></canvas>
-    </div>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
   </div>
 </div>
 
 <script>
-const SERVER = '';
-let chart    = null;
+const SERVER  = '';
+let chart     = null;
 let activeTab = 'temp';
 let istoric   = { temp:[], umid:[], sol:[], labels:[] };
-let modManual = false; // false = AUTO, true = MANUAL
+let modManual = false;
+
+// ── Trimite starea completa la server ─────────
+async function trimiteControl() {
+  await fetch(SERVER + '/api/control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mod_manual: modManual,
+      ptc:   document.getElementById('tog-ptc').checked,
+      fan:   document.getElementById('tog-fan').checked,
+      pompa: document.getElementById('tog-pompa').checked
+    })
+  });
+}
+
+// ── Apelat cand se schimba un toggle ─────────
+function actuatorChanged() {
+  if (modManual) trimiteControl();
+}
 
 // ── Buton Auto/Manual ─────────────────────────
-function toggleMode() {
+async function toggleMode() {
   modManual = !modManual;
+
+  // Daca trecem pe AUTO opreste toti actuatorii
+  if (!modManual) {
+    document.getElementById('tog-ptc').checked   = false;
+    document.getElementById('tog-fan').checked   = false;
+    document.getElementById('tog-pompa').checked = false;
+  }
+
+  await trimiteControl();
   updateModeUI();
-  // Trimite modul la server ca sa ajunga la ESP32
-  sendCmd('mode', modManual);
 }
 
 function updateModeUI() {
   const btn  = document.getElementById('mode-btn');
   const desc = document.getElementById('mode-desc');
 
-  // Buton
   btn.textContent = modManual ? 'MANUAL' : 'AUTO';
   btn.className   = 'mode-btn ' + (modManual ? 'manual' : 'auto');
-
-  // Descriere
   desc.textContent = modManual
     ? 'Controlezi tu actuatorii manual'
     : 'Sistemul controlează automat';
 
-  // Toggle-uri — active doar in mod manual
   ['ptc','fan','pompa'].forEach(id => {
-    const lbl = document.getElementById('lbl-' + id);
-    const st  = document.getElementById('state-' + id);
-    if (modManual) {
-      lbl.classList.remove('disabled');
-      st.textContent = 'control manual activ';
-    } else {
-      lbl.classList.add('disabled');
-      st.textContent = id === 'pompa' ? 'controlată automat' : 'controlat automat';
-    }
+    document.getElementById('lbl-' + id)
+      .classList.toggle('disabled', !modManual);
+    document.getElementById('state-' + id).textContent = modManual
+      ? 'control manual activ'
+      : (id === 'pompa' ? 'controlată automat' : 'controlat automat');
   });
-
-  // Alerta mod
-  const box = document.getElementById('alerts');
-  if (modManual) {
-    const alerta = document.createElement('div');
-    alerta.className = 'alert alert-info';
-    alerta.id = 'alert-manual';
-    alerta.textContent = 'Mod manual activ — logica automată oprită!';
-    box.prepend(alerta);
-  } else {
-    const el = document.getElementById('alert-manual');
-    if (el) el.remove();
-  }
 }
 
-// ── Grafic ────────────────────────────────────
 function switchTab(tab, el) {
   activeTab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -241,47 +226,33 @@ function updateChart() {
   });
 }
 
-// ── Alerte ────────────────────────────────────
 function updateAlerts(d) {
   const box    = document.getElementById('alerts');
-  const manual = document.getElementById('alert-manual');
   const alerts = [];
-
+  if (modManual)
+    alerts.push({ t:'info', m:'Mod manual activ — logica automată oprită!' });
   if (d.temperatura != null) {
     if (d.temperatura < 18)
       alerts.push({ t:'err',  m:'Temperatura sub minim (18°C)!' });
     else if (d.temperatura > 30)
       alerts.push({ t:'warn', m:'Temperatura peste maxim (30°C)!' });
   }
-  if (d.sol1 != null && d.sol2 != null) {
-    if ((d.sol1 + d.sol2) / 2 < 30)
-      alerts.push({ t:'warn', m:'Sol uscat — pompa activă!' });
-  }
+  if (d.sol1 != null && d.sol2 != null && (d.sol1+d.sol2)/2 < 30)
+    alerts.push({ t:'warn', m:'Sol uscat — pompa activă!' });
 
-  const html = alerts.length === 0
+  box.innerHTML = alerts.length === 0
     ? '<div class="alert alert-ok">Toți parametrii normali ✓</div>'
     : alerts.map(a =>
-        `<div class="alert alert-${a.t === 'err' ? 'err' : 'warn'}">${a.m}</div>`
+        `<div class="alert alert-${a.t}">${a.m}</div>`
       ).join('');
-
-  box.innerHTML = html;
-
-  // Readauga alerta manual daca era activa
-  if (manual || modManual) {
-    const alerta = document.createElement('div');
-    alerta.className = 'alert alert-info';
-    alerta.id = 'alert-manual';
-    alerta.textContent = 'Mod manual activ — logica automată oprită!';
-    box.prepend(alerta);
-  }
 }
 
-// ── Fetch date de la server ───────────────────
 async function fetchDate() {
   try {
-    const [cur, ist] = await Promise.all([
+    const [cur, ist, ctrl] = await Promise.all([
       fetch(SERVER + '/api/curent').then(r => r.json()),
-      fetch(SERVER + '/api/istoric').then(r => r.json())
+      fetch(SERVER + '/api/istoric').then(r => r.json()),
+      fetch(SERVER + '/api/control').then(r => r.json())
     ]);
 
     document.getElementById('val-temp').textContent =
@@ -289,19 +260,19 @@ async function fetchDate() {
     document.getElementById('val-umid').textContent =
       cur.umiditate != null ? Number(cur.umiditate).toFixed(0) : '--';
     const sol = (cur.sol1 != null && cur.sol2 != null)
-      ? Math.round((cur.sol1 + cur.sol2) / 2) : '--';
+      ? Math.round((cur.sol1+cur.sol2)/2) : '--';
     document.getElementById('val-sol').textContent = sol;
 
-    // Actualizeaza toggle-uri doar in mod manual
-    if (modManual) {
-      document.getElementById('tog-ptc').checked   = !!cur.ptc;
-      document.getElementById('tog-fan').checked   = !!cur.fan;
-      document.getElementById('tog-pompa').checked = !!cur.pompa;
-    } else {
-      document.getElementById('tog-ptc').checked   = !!cur.ptc;
-      document.getElementById('tog-fan').checked   = !!cur.fan;
-      document.getElementById('tog-pompa').checked = !!cur.pompa;
+    // Sincronizeaza modul cu serverul
+    if (ctrl.mod_manual !== undefined && ctrl.mod_manual !== modManual) {
+      modManual = ctrl.mod_manual;
+      updateModeUI();
     }
+
+    // Actualizeaza toggle-uri
+    document.getElementById('tog-ptc').checked   = !!cur.ptc;
+    document.getElementById('tog-fan').checked   = !!cur.fan;
+    document.getElementById('tog-pompa').checked = !!cur.pompa;
 
     if (cur.temperatura != null) updateAlerts(cur);
 
@@ -313,7 +284,7 @@ async function fetchDate() {
     istoric.umid = ist.map(r => r.umiditate);
     istoric.sol  = ist.map(r =>
       r.sol1 != null && r.sol2 != null
-        ? Math.round((r.sol1 + r.sol2) / 2) : null
+        ? Math.round((r.sol1+r.sol2)/2) : null
     );
     updateChart();
 
@@ -322,17 +293,6 @@ async function fetchDate() {
   } catch(e) {
     document.getElementById('last-update').textContent = 'Eroare conexiune server';
   }
-}
-
-// ── Trimite comanda la server ─────────────────
-async function sendCmd(actuator, stare) {
-  try {
-    await fetch(SERVER + '/api/comanda', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actuator, stare })
-    });
-  } catch(e) {}
 }
 
 fetchDate();
