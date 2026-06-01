@@ -270,10 +270,12 @@ async function fetchDate() {
     }
 
     // Actualizeaza toggle-uri
-    document.getElementById('tog-ptc').checked   = !!cur.ptc;
-    document.getElementById('tog-fan').checked   = !!cur.fan;
-    document.getElementById('tog-pompa').checked = !!cur.pompa;
-
+    // Actualizeaza toggle-uri DOAR in mod auto
+    if (!modManual) {
+        document.getElementById('tog-ptc').checked   = !!cur.ptc;
+        document.getElementById('tog-fan').checked   = !!cur.fan;
+        document.getElementById('tog-pompa').checked = !!cur.pompa;
+}
     if (cur.temperatura != null) updateAlerts(cur);
 
     istoric.labels = ist.map(r =>
