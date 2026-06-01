@@ -9,7 +9,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #f5f5f5; padding: 16px; }
     .container { max-width: 900px; margin: 0 auto; }
-    h1 { text-align: center; margin-bottom: 20px; color: #333; }
+    h1 { text-align: center; margin-bottom: 8px; color: #333; }
     .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 16px; }
     .grid2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-bottom: 16px; }
     .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
@@ -19,21 +19,40 @@
     .section-title { font-size: 13px; font-weight: bold; color: #888; text-transform: uppercase; margin-bottom: 12px; }
     .actuator-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
     .actuator-row:last-child { border-bottom: none; }
+    .act-name { font-size: 14px; color: #333; }
+    .act-state { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+    /* Toggle switch */
     .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
     .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
     .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; transition: .2s; }
     .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
     input:checked + .slider { background: #2ecc71; }
     input:checked + .slider:before { transform: translateX(20px); }
+    .toggle.disabled { opacity: 0.4; pointer-events: none; }
+
+    /* Buton Auto/Manual */
+    .mode-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; }
+    .mode-btn { padding: 8px 28px; border-radius: 20px; border: none; font-size: 14px; font-weight: bold; cursor: pointer; transition: all .2s; }
+    .mode-btn.auto   { background: #2ecc71; color: #fff; }
+    .mode-btn.manual { background: #e74c3c; color: #fff; }
+    .mode-label { font-size: 13px; color: #888; }
+
     .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
     .alert-ok   { background: #e8f5e9; color: #2e7d32; }
     .alert-warn { background: #fff8e1; color: #f57f17; }
     .alert-err  { background: #ffebee; color: #c62828; }
+    .alert-info { background: #e3f2fd; color: #1565c0; }
     .chart-wrap { height: 200px; }
     .tab-row { display: flex; gap: 8px; margin-bottom: 12px; }
     .tab { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #ddd; background: #f5f5f5; }
     .tab.active { background: #333; color: #fff; border-color: #333; }
     .last-update { font-size: 11px; color: #aaa; text-align: right; margin-bottom: 12px; }
+
+    @media(max-width:600px) {
+      .grid3 { grid-template-columns: 1fr; }
+      .grid2 { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -41,6 +60,16 @@
   <h1>🌱 Seră Automatizată</h1>
   <div id="last-update" class="last-update">Se încarcă...</div>
 
+  <!-- Buton Auto / Manual -->
+  <div class="mode-bar">
+    <span class="mode-label">Mod curent:</span>
+    <button id="mode-btn" class="mode-btn auto" onclick="toggleMode()">
+      AUTO
+    </button>
+    <span id="mode-desc" class="mode-label">Sistemul controlează automat</span>
+  </div>
+
+  <!-- Carduri valori -->
   <div class="grid3">
     <div class="card">
       <div class="metric-label">Temperatură</div>
@@ -57,30 +86,45 @@
   </div>
 
   <div class="grid2">
+    <!-- Actuatori -->
     <div class="card">
       <div class="section-title">Actuatori</div>
+
       <div class="actuator-row">
-        <span>Încălzitor PTC</span>
-        <label class="toggle">
+        <div>
+          <div class="act-name">Încălzitor PTC</div>
+          <div class="act-state" id="state-ptc">controlat automat</div>
+        </div>
+        <label class="toggle disabled" id="lbl-ptc">
           <input type="checkbox" id="tog-ptc" onchange="sendCmd('ptc',this.checked)">
           <span class="slider"></span>
         </label>
       </div>
+
       <div class="actuator-row">
-        <span>Ventilator</span>
-        <label class="toggle">
+        <div>
+          <div class="act-name">Ventilator</div>
+          <div class="act-state" id="state-fan">controlat automat</div>
+        </div>
+        <label class="toggle disabled" id="lbl-fan">
           <input type="checkbox" id="tog-fan" onchange="sendCmd('fan',this.checked)">
           <span class="slider"></span>
         </label>
       </div>
+
       <div class="actuator-row">
-        <span>Pompă irigare</span>
-        <label class="toggle">
+        <div>
+          <div class="act-name">Pompă irigare</div>
+          <div class="act-state" id="state-pompa">controlată automat</div>
+        </div>
+        <label class="toggle disabled" id="lbl-pompa">
           <input type="checkbox" id="tog-pompa" onchange="sendCmd('pompa',this.checked)">
           <span class="slider"></span>
         </label>
       </div>
     </div>
+
+    <!-- Alerte -->
     <div class="card">
       <div class="section-title">Alerte</div>
       <div id="alerts">
@@ -89,6 +133,7 @@
     </div>
   </div>
 
+  <!-- Grafic -->
   <div class="card">
     <div class="section-title">Istoric 24 ore</div>
     <div class="tab-row">
@@ -104,10 +149,60 @@
 
 <script>
 const SERVER = '';
-let chart = null;
+let chart    = null;
 let activeTab = 'temp';
-let istoric = { temp:[], umid:[], sol:[], labels:[] };
+let istoric   = { temp:[], umid:[], sol:[], labels:[] };
+let modManual = false; // false = AUTO, true = MANUAL
 
+// ── Buton Auto/Manual ─────────────────────────
+function toggleMode() {
+  modManual = !modManual;
+  updateModeUI();
+  // Trimite modul la server ca sa ajunga la ESP32
+  sendCmd('mode', modManual);
+}
+
+function updateModeUI() {
+  const btn  = document.getElementById('mode-btn');
+  const desc = document.getElementById('mode-desc');
+
+  // Buton
+  btn.textContent = modManual ? 'MANUAL' : 'AUTO';
+  btn.className   = 'mode-btn ' + (modManual ? 'manual' : 'auto');
+
+  // Descriere
+  desc.textContent = modManual
+    ? 'Controlezi tu actuatorii manual'
+    : 'Sistemul controlează automat';
+
+  // Toggle-uri — active doar in mod manual
+  ['ptc','fan','pompa'].forEach(id => {
+    const lbl = document.getElementById('lbl-' + id);
+    const st  = document.getElementById('state-' + id);
+    if (modManual) {
+      lbl.classList.remove('disabled');
+      st.textContent = 'control manual activ';
+    } else {
+      lbl.classList.add('disabled');
+      st.textContent = id === 'pompa' ? 'controlată automat' : 'controlat automat';
+    }
+  });
+
+  // Alerta mod
+  const box = document.getElementById('alerts');
+  if (modManual) {
+    const alerta = document.createElement('div');
+    alerta.className = 'alert alert-info';
+    alerta.id = 'alert-manual';
+    alerta.textContent = 'Mod manual activ — logica automată oprită!';
+    box.prepend(alerta);
+  } else {
+    const el = document.getElementById('alert-manual');
+    if (el) el.remove();
+  }
+}
+
+// ── Grafic ────────────────────────────────────
 function switchTab(tab, el) {
   activeTab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -128,19 +223,15 @@ function updateChart() {
     data: {
       labels: istoric.labels,
       datasets: [{
-        label: s.label,
-        data: s.data,
+        label: s.label, data: s.data,
         borderColor: s.color,
         backgroundColor: s.color + '22',
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: true,
-        tension: 0.3
+        borderWidth: 2, pointRadius: 0,
+        fill: true, tension: 0.3
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { maxTicksLimit: 8, font: { size: 11 } } },
@@ -150,22 +241,42 @@ function updateChart() {
   });
 }
 
+// ── Alerte ────────────────────────────────────
 function updateAlerts(d) {
-  const box = document.getElementById('alerts');
+  const box    = document.getElementById('alerts');
+  const manual = document.getElementById('alert-manual');
   const alerts = [];
-  if (d.temperatura < 18)
-    alerts.push({ t:'err',  m:'Temperatura sub minim (18°C)!' });
-  else if (d.temperatura > 30)
-    alerts.push({ t:'warn', m:'Temperatura peste maxim (30°C)!' });
-  if ((d.sol1 + d.sol2) / 2 < 30)
-    alerts.push({ t:'warn', m:'Sol uscat — pompa activa!' });
-  box.innerHTML = alerts.length === 0
-    ? '<div class="alert alert-ok">Toti parametrii normali ✓</div>'
+
+  if (d.temperatura != null) {
+    if (d.temperatura < 18)
+      alerts.push({ t:'err',  m:'Temperatura sub minim (18°C)!' });
+    else if (d.temperatura > 30)
+      alerts.push({ t:'warn', m:'Temperatura peste maxim (30°C)!' });
+  }
+  if (d.sol1 != null && d.sol2 != null) {
+    if ((d.sol1 + d.sol2) / 2 < 30)
+      alerts.push({ t:'warn', m:'Sol uscat — pompa activă!' });
+  }
+
+  const html = alerts.length === 0
+    ? '<div class="alert alert-ok">Toți parametrii normali ✓</div>'
     : alerts.map(a =>
         `<div class="alert alert-${a.t === 'err' ? 'err' : 'warn'}">${a.m}</div>`
       ).join('');
+
+  box.innerHTML = html;
+
+  // Readauga alerta manual daca era activa
+  if (manual || modManual) {
+    const alerta = document.createElement('div');
+    alerta.className = 'alert alert-info';
+    alerta.id = 'alert-manual';
+    alerta.textContent = 'Mod manual activ — logica automată oprită!';
+    box.prepend(alerta);
+  }
 }
 
+// ── Fetch date de la server ───────────────────
 async function fetchDate() {
   try {
     const [cur, ist] = await Promise.all([
@@ -181,9 +292,16 @@ async function fetchDate() {
       ? Math.round((cur.sol1 + cur.sol2) / 2) : '--';
     document.getElementById('val-sol').textContent = sol;
 
-    document.getElementById('tog-ptc').checked   = !!cur.ptc;
-    document.getElementById('tog-fan').checked   = !!cur.fan;
-    document.getElementById('tog-pompa').checked = !!cur.pompa;
+    // Actualizeaza toggle-uri doar in mod manual
+    if (modManual) {
+      document.getElementById('tog-ptc').checked   = !!cur.ptc;
+      document.getElementById('tog-fan').checked   = !!cur.fan;
+      document.getElementById('tog-pompa').checked = !!cur.pompa;
+    } else {
+      document.getElementById('tog-ptc').checked   = !!cur.ptc;
+      document.getElementById('tog-fan').checked   = !!cur.fan;
+      document.getElementById('tog-pompa').checked = !!cur.pompa;
+    }
 
     if (cur.temperatura != null) updateAlerts(cur);
 
@@ -202,11 +320,11 @@ async function fetchDate() {
     document.getElementById('last-update').textContent =
       'Actualizat: ' + new Date().toLocaleTimeString('ro-RO');
   } catch(e) {
-    document.getElementById('last-update').textContent =
-      'Eroare conexiune server';
+    document.getElementById('last-update').textContent = 'Eroare conexiune server';
   }
 }
 
+// ── Trimite comanda la server ─────────────────
 async function sendCmd(actuator, stare) {
   try {
     await fetch(SERVER + '/api/comanda', {
